@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200" role="img" aria-labelledby="title desc">
+<title id="title">Quantsmind OSINT Platform — High Level Design</title>
+<desc id="desc">Public data sources to Collection layer to Ingestion queue to Storage layer (PostgreSQL, Elasticsearch, Object storage) to Processing and NLP layer to Backend API to Frontend, with cross-cutting Security and DevOps</desc>
+<rect width="900" height="1200" rx="16" fill="#0a0a0a"/>
+<style>
+  .box { rx:16; ry:16; stroke-width:1.2 }
+  .label { font-family: 'Segoe UI', Inter, sans-serif; font-size:19px; font-weight:700; text-anchor:middle; dominant-baseline:middle }
+  .sub { font-family: 'Segoe UI', Inter, sans-serif; font-size:12.5px; font-weight:500; text-anchor:middle; dominant-baseline:middle; opacity:0.9 }
+  .small { font-family: 'Segoe UI', Inter, sans-serif; font-size:13px; font-weight:600; text-anchor:middle }
+  .arrow { stroke:#9ca3af; stroke-width:1.8; fill:none; marker-end:url(#arrow) }
+</style>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9ca3af"/></marker>
+</defs>
+
+<!-- Public data sources -->
+<rect x="30" y="22" width="840" height="72" class="box" fill="#fefce8" stroke="#e7e5d1"/>
+<text x="450" y="48" class="label" fill="#1f2937">Public data sources</text>
+<text x="450" y="71" class="sub" fill="#6b7280">Websites, news, social media, forums, public APIs, RSS</text>
+
+<!-- Arrow 1 -->
+<line x1="450" y1="94" x2="450" y2="118" class="arrow"/>
+
+<!-- Collection layer -->
+<rect x="30" y="122" width="840" height="78" class="box" fill="#f5f3ff" stroke="#a78bfa" />
+<text x="450" y="151" class="label" fill="#4c1d95">Collection layer (Python)</text>
+<text x="450" y="175" class="sub" fill="#6d28d9">Scrapy, Playwright, API connectors — scheduled by Celery beat</text>
+
+<line x1="450" y1="200" x2="450" y2="224" class="arrow"/>
+
+<!-- Ingestion queue -->
+<rect x="180" y="228" width="540" height="72" class="box" fill="#f5f3ff" stroke="#a78bfa"/>
+<text x="450" y="254" class="label" fill="#4c1d95">Ingestion queue</text>
+<text x="450" y="277" class="sub" fill="#6d28d9">Redis / RabbitMQ / Kafka</text>
+
+<line x1="450" y1="300" x2="450" y2="324" class="arrow"/>
+
+<!-- Storage layer -->
+<rect x="30" y="328" width="840" height="168" class="box" fill="#ecfdf5" stroke="#6ee7b7"/>
+<text x="110" y="356" class="small" fill="#065f46" text-anchor="start" font-weight="700">Storage layer</text>
+<!-- three inner boxes -->
+<rect x="48" y="374" width="250" height="96" rx="14" fill="#ecfdf5" stroke="#0f766e" stroke-width="1"/>
+<text x="173" y="406" class="label" fill="#134e4a" font-size="15">PostgreSQL</text>
+<text x="173" y="426" class="sub" fill="#0f766e" font-size="12">Structured records</text>
+
+<rect x="325" y="374" width="250" height="96" rx="14" fill="#ecfdf5" stroke="#0f766e" stroke-width="1"/>
+<text x="450" y="406" class="label" fill="#134e4a" font-size="15">Elasticsearch</text>
+<text x="450" y="426" class="sub" fill="#0f766e" font-size="12">Full-text search</text>
+
+<rect x="602" y="374" width="250" height="96" rx="14" fill="#ecfdf5" stroke="#0f766e" stroke-width="1"/>
+<text x="727" y="406" class="label" fill="#134e4a" font-size="15">Object storage</text>
+<text x="727" y="426" class="sub" fill="#0f766e" font-size="12">Raw HTML, media, S3/MinIO</text>
+
+<line x1="450" y1="496" x2="450" y2="520" class="arrow"/>
+
+<!-- Processing and NLP layer -->
+<rect x="30" y="524" width="840" height="78" class="box" fill="#fff1f2" stroke="#fda4af"/>
+<text x="450" y="553" class="label" fill="#7f1d1d">Processing and NLP layer</text>
+<text x="450" y="577" class="sub" fill="#9f1239">Entity extraction, sentiment, topic modeling, dedup, language ID</text>
+
+<line x1="450" y1="602" x2="450" y2="626" class="arrow"/>
+
+<!-- Backend API -->
+<rect x="30" y="630" width="840" height="78" class="box" fill="#eff6ff" stroke="#93c5fd"/>
+<text x="450" y="659" class="label" fill="#1e3a5f">Backend API (Django + DRF)</text>
+<text x="450" y="683" class="sub" fill="#1d4ed8">REST + WebSocket (Django Channels) for real-time updates</text>
+
+<line x1="450" y1="708" x2="450" y2="732" class="arrow"/>
+
+<!-- Frontend -->
+<rect x="30" y="736" width="840" height="78" class="box" fill="#eff6ff" stroke="#93c5fd"/>
+<text x="450" y="765" class="label" fill="#1e3a5f">Frontend (Vue.js)</text>
+<text x="450" y="789" class="sub" fill="#1d4ed8">Dashboards, geo maps, trend charts, alerts</text>
+
+<!-- Cross-cutting: Security -->
+<rect x="30" y="860" width="400" height="126" class="box" fill="#fff1f2" stroke="#fda4af"/>
+<text x="48" y="890" class="small" fill="#7f1d1d" text-anchor="start" font-size="15">Security (cross-cutting)</text>
+<text x="48" y="914" class="sub" fill="#9f1239" text-anchor="start" font-size="12.5">Auth (OAuth2/JWT), RBAC</text>
+<text x="48" y="934" class="sub" fill="#9f1239" text-anchor="start" font-size="12.5">Encryption in transit/at rest</text>
+<text x="48" y="954" class="sub" fill="#9f1239" text-anchor="start" font-size="12.5">Audit logging</text>
+
+<!-- Cross-cutting: DevOps -->
+<rect x="470" y="860" width="400" height="126" class="box" fill="#fef3c7" stroke="#fcd34d"/>
+<text x="488" y="890" class="small" fill="#78350f" text-anchor="start" font-size="15">DevOps (cross-cutting)</text>
+<text x="488" y="914" class="sub" fill="#92400e" text-anchor="start" font-size="12.5">Docker + Compose/Kubernetes</text>
+<text x="488" y="934" class="sub" fill="#92400e" text-anchor="start" font-size="12.5">Git + CI/CD pipelines</text>
+<text x="488" y="954" class="sub" fill="#92400e" text-anchor="start" font-size="12.5">Monitoring: Prometheus/Grafana</text>
+</svg>
