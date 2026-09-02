@@ -1,14 +1,62 @@
 apiVersion: apps/v1
 kind: Deployment
-metadata: { name: backend, namespace: osint }
+metadata: { name: backend, namespace: osint, labels: { app: backend } }
 spec:
   replicas: 2
+  strategy: { type: RollingUpdate, rollingUpdate: { maxSurge: 1, maxUnavailable: 0 } }
   selector: { matchLabels: { app: backend } }
   template:
     metadata: { labels: { app: backend } }
     spec:
       containers:
         - name: backend
-          image: osint-backend:latest
-          ports: [{ containerPort: 8000 }]
+          image: ghcr.io/quantsmind/osint-backend:latest
+          imagePullPolicy: Always
+          ports: [{ containerPort: 8000, name: http }]
+          envFrom: [{ secretRef: { name: osint-secrets } }]
+          env:
+            - { name: DJANGO_DEBUG, value: "0" }
+            - { name: DJANGO_ALLOWED_HOSTS, value: "osint.example.com" }
+          livenessProbe: { httpGet: { path: /health/, port: 8000 }, initialDelaySeconds: 30, periodSeconds: 15 }
+          readinessProbe: { httpGet: { path: /health/, port: 8000 }, initialDelaySeconds: 10, periodSeconds: 10 }
+          resources: { requests: { cpu: "250m", memory: "512Mi" }, limits: { cpu: "1000m", memory: "1Gi" } }
+          securityContext: { runAsNonRoot: true, readOnlyRootFilesystem: false, allowPrivilegeEscalation: false }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: backend, namespace: osint }
+spec:
+  selector: { app: backend }
+  ports: [{ port: 8000, targetPort: 8000, name: http }]
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: celery-worker, namespace: osint }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: celery-worker } }
+  template:
+    metadata: { labels: { app: celery-worker } }
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/quantsmind/osint-backend:latest
+          command: ["celery","-A","config","worker","-l","info","--concurrency=4"]
+          envFrom: [{ secretRef: { name: osint-secrets } }]
+          resources: { requests: { cpu: "250m", memory: "512Mi" }, limits: { cpu: "1000m", memory: "1Gi" } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: celery-beat, namespace: osint }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: celery-beat } }
+  template:
+    metadata: { labels: { app: celery-beat } }
+    spec:
+      containers:
+        - name: beat
+          image: ghcr.io/quantsmind/osint-backend:latest
+          command: ["celery","-A","config","beat","-l","info"]
           envFrom: [{ secretRef: { name: osint-secrets } }]

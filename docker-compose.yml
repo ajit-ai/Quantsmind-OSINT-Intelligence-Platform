@@ -10,12 +10,15 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-osint}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-osint} -d ${POSTGRES_DB:-osint}"]
       interval: 5s
       retries: 10
+      start_period: 10s
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    command: redis-server --save 60 1 --loglevel warning
     ports:
       - "6379:6379"
     volumes:
@@ -24,6 +27,37 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       retries: 10
+    restart: unless-stopped
+    # Queue pluggability: swap CELERY_BROKER_URL to amqp:// or kafka:// and enable alternate service:
+    # profiles: use `docker compose --profile queue-rabbitmq up` or `--profile queue-kafka up`
+
+  # Optional: RabbitMQ (alternate broker) — enable with: docker compose --profile queue-rabbitmq up
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    profiles: ["queue-rabbitmq"]
+    environment:
+      RABBITMQ_DEFAULT_USER: osint
+      RABBITMQ_DEFAULT_PASS: osint_password
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+
+  # Optional: Kafka (high-throughput alternate) — enable with: docker compose --profile queue-kafka up
+  kafka:
+    image: bitnami/kafka:3.7
+    profiles: ["queue-kafka"]
+    environment:
+      KAFKA_CFG_NODE_ID: 0
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: true
+    ports:
+      - "9092:9092"
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
@@ -31,10 +65,16 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - indices.queries.cache.size=10%
     ports:
       - "9200:9200"
     volumes:
       - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s || exit 1"]
+      interval: 15s
+      retries: 5
+    restart: unless-stopped
 
   minio:
     image: minio/minio:latest
@@ -51,20 +91,25 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
       retries: 5
+    restart: unless-stopped
 
   backend:
     build:
       context: ./backend
     command: >
-      bash -c "python manage.py migrate &&
+      bash -c "python manage.py wait_for_db 2>/dev/null || sleep 3;
+               python manage.py migrate --noinput &&
                python manage.py create_buckets 2>/dev/null || true &&
+               python manage.py collectstatic --noinput 2>/dev/null || true &&
                python manage.py runserver 0.0.0.0:8000"
     env_file: .env.example
     environment:
       DATABASE_URL: postgres://osint:osint_password@postgres:5432/osint
       REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       ELASTICSEARCH_URL: http://elasticsearch:9200
       AWS_S3_ENDPOINT_URL: http://minio:9000
+      DJANGO_DEBUG: "1"
     volumes:
       - ./backend:/app
     ports:
@@ -76,30 +121,49 @@ services:
         condition: service_healthy
       elasticsearch:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health/ || curl -sf http://localhost:8000/api/health/ || exit 1"]
+      interval: 15s
+      retries: 5
+    restart: unless-stopped
 
   celery_worker:
     build:
       context: ./backend
-    command: celery -A config worker -l info
+    command: celery -A config worker -l info --concurrency=4
     env_file: .env.example
+    environment:
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      AWS_S3_ENDPOINT_URL: http://minio:9000
     volumes:
       - ./backend:/app
       - ./collectors:/collectors
     depends_on:
-      - redis
-      - postgres
-      - elasticsearch
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1G }
 
   celery_beat:
     build:
       context: ./backend
-    command: celery -A config beat -l info
+    command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     env_file: .env.example
+    environment:
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
     volumes:
       - ./backend:/app
       - ./collectors:/collectors
     depends_on:
       - redis
+    restart: unless-stopped
 
   frontend:
     build:
@@ -111,24 +175,38 @@ services:
       - ./frontend:/app
       - /app/node_modules
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
     volumes:
       - ./devops/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prom_data:/prometheus
     ports:
       - "9090:9090"
+    command: ["--config.file=/etc/prometheus/prometheus.yml","--storage.tsdb.path=/prometheus"]
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:latest
     ports:
       - "3001:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./devops/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+      - ./devops/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
+    depends_on: [prometheus]
+    restart: unless-stopped
 
 volumes:
   pgdata:
   esdata:
   minio_data:
   redis_data:
+  prom_data:
+  grafana_data:
