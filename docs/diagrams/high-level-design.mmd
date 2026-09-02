@@ -1,0 +1,23 @@
+%% Quantsmind OSINT — High Level Design (Mermaid)
+%% Render with https://mermaid.live or docsify mermaid plugin
+flowchart TD
+    A[Public data sources<br/><sub>Websites, news, social media, forums, public APIs, RSS</sub>]:::cream
+    B[Collection layer (Python)<br/><sub>Scrapy, Playwright, API connectors — scheduled by Celery beat</sub>]:::lavender
+    C[Ingestion queue<br/><sub>Redis / RabbitMQ / Kafka</sub>]:::lavender
+    D{{Storage layer}}:::mint --> D1[(PostgreSQL<br/><sub>Structured records</sub>)]:::mintInner & D2[(Elasticsearch<br/><sub>Full-text search</sub>)]:::mintInner & D3[(Object storage<br/><sub>Raw HTML, media, S3/MinIO</sub>)]:::mintInner
+    E[Processing and NLP layer<br/><sub>Entity extraction, sentiment, topic modeling, dedup, language ID</sub>]:::peach
+    F[Backend API (Django + DRF)<br/><sub>REST + WebSocket (Django Channels) for real-time updates</sub>]:::blue
+    G[Frontend (Vue.js)<br/><sub>Dashboards, geo maps, trend charts, alerts</sub>]:::blue
+    H[Security (cross-cutting)<br/><sub>Auth OAuth2/JWT, RBAC<br/>Encryption in transit/at rest<br/>Audit logging</sub>]:::pink
+    I[DevOps (cross-cutting)<br/><sub>Docker + Compose/Kubernetes<br/>Git + CI/CD pipelines<br/>Monitoring: Prometheus/Grafana</sub>]:::yellow
+
+    A --> B --> C --> D --> E --> F --> G
+
+    classDef cream fill:#fefce8,stroke:#e7e5d1,color:#1f2937
+    classDef lavender fill:#f5f3ff,stroke:#a78bfa,color:#4c1d95
+    classDef mint fill:#ecfdf5,stroke:#6ee7b7,color:#065f46
+    classDef mintInner fill:#ecfdf5,stroke:#0f766e,color:#134e4a
+    classDef peach fill:#fff1f2,stroke:#fda4af,color:#7f1d1d
+    classDef blue fill:#eff6ff,stroke:#93c5fd,color:#1e3a5f
+    classDef pink fill:#fff1f2,stroke:#fda4af,color:#7f1d1d
+    classDef yellow fill:#fef3c7,stroke:#fcd34d,color:#78350f
